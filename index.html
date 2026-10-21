@@ -16,8 +16,8 @@
 <style>
 :root{--ink:#111;--line:#222;--bar:#1f3a4d;--accent:#e8a317;--bg:#d9dde0}
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);font-family:"Hiragino Sans","Yu Gothic","Meiryo",sans-serif;color:var(--ink)}
-#bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;padding:6px 10px;background:linear-gradient(180deg,#fff 0%,#e8f3fd 100%);border-bottom:1px solid #c6def4;box-shadow:0 2px 8px rgba(30,110,170,.15);color:#12324d}
+html,body{margin:0;max-width:100%;background:var(--bg);font-family:"Hiragino Sans","Yu Gothic","Meiryo",sans-serif;color:var(--ink)}
+#bar{max-width:100vw;overflow:visible;position:sticky;top:env(safe-area-inset-top,0px);z-index:20;display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;padding:6px 10px;background:linear-gradient(180deg,#fff 0%,#e8f3fd 100%);border-bottom:1px solid #c6def4;box-shadow:0 2px 8px rgba(30,110,170,.15);color:#12324d}
 #bar .top{display:flex;align-items:center;gap:8px;flex:1 1 260px;min-width:0;max-width:460px}
 #bar .site-pick{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:8px;height:38px;padding:0 6px 0 8px;border:1.5px solid #8ec5f0;border-radius:10px;background:#fff}
 #bar .lb{flex:none;font-size:10px;font-weight:800;letter-spacing:.05em;padding:2px 7px;border-radius:99px;background:#ffb020;color:#3b2600}
@@ -42,12 +42,15 @@ html,body{margin:0;background:var(--bg);font-family:"Hiragino Sans","Yu Gothic",
 #menu button.danger{color:#b3261e;border-color:#f0c4c0}
 #menu hr{margin:2px 0;border:0;border-top:1px solid #e1e8ef}
 @media (max-width:560px){
-#bar{padding:6px 8px}
+#bar{padding:6px 8px;gap:6px}
 #bar .top{flex:1 1 100%;max-width:none}
-#bar .acts{flex:1 1 100%;margin-left:0}
-#bar .a:not(.ic){flex:1 1 auto;padding:0 8px}
-#bar .a.hide-sm svg{display:none}
-#menu{right:0;left:auto}}
+#bar .acts{flex:1 1 100%;margin-left:0;flex-wrap:wrap;gap:6px}
+#bar .a{min-width:0;min-height:40px}
+#bar .a:not(.ic){flex:1 1 auto;padding:0 6px;font-size:12.5px}
+#bar .a:not(.ic) svg{display:none}
+#bar .a.ic{flex:0 0 40px;width:40px}
+#bar .st{font-size:10px}
+#menu{right:0;left:auto;max-width:calc(100vw - 16px)}}
 #stage{transform-origin:top left;width:210mm;margin:10px auto}
 .sheet{position:relative;width:210mm;height:297mm;margin:0 auto 12px;padding:7mm 6mm;background:#fff;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.25);font-size:10pt}
 .ver{position:absolute;top:4mm;right:6mm;font-size:6.5pt;font-weight:700}
