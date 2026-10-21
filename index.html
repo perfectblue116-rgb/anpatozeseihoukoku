@@ -85,6 +85,22 @@ select{font:inherit;font-size:9.5pt;height:5mm;padding:0 1mm;border:1px solid #8
 .photo .x{position:absolute;top:2mm;right:2mm;width:7mm;height:7mm;border:0;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;font-size:14px}
 .del{position:absolute;right:2mm;bottom:1.5mm;font-size:8pt;border:1px solid #c33;color:#c33;background:#fff;border-radius:4px;padding:1px 6px}
 #toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:8px;font-size:14px;display:none;z-index:50;max-width:90vw}
+#dm{width:min(94vw,460px);max-height:88vh;overflow:auto}
+#dm h4{margin:14px 0 6px;font-size:13px;color:#0b5fa5;border-left:4px solid #1e88e5;padding-left:6px}
+#dm .use{font-size:12px;line-height:1.6;background:#eef6fd;border-radius:8px;padding:8px 10px}
+#dm .use b{font-size:14px}
+#dm .bar{height:8px;border-radius:99px;background:#dbe6f0;overflow:hidden;margin-top:4px}
+#dm .bar i{display:block;height:100%;background:#1e88e5;width:0}
+#dm .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+#dm .row button,#dm .row select{flex:1 1 auto;min-height:38px;font:inherit;font-size:13px;font-weight:700;border-radius:8px;border:1.5px solid #c3d3e2;background:#fff;padding:0 10px}
+#dm .row button.danger{color:#b3261e;border-color:#f0c4c0}
+#dm ul{list-style:none;margin:6px 0 0;padding:0;max-height:200px;overflow:auto;border:1px solid #e1e8ef;border-radius:8px}
+#dm li{display:flex;align-items:center;gap:6px;padding:6px 8px;font-size:12px;border-bottom:1px solid #eef2f6}
+#dm li:last-child{border:0}
+#dm li span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#dm li em{font-style:normal;color:#5d6b7a;white-space:nowrap}
+#dm li button{padding:3px 8px;font-size:11px;border-color:#f0c4c0;color:#b3261e}
+#dm .note{font-size:11px;color:#5d6b7a;line-height:1.5;margin:4px 0 0}
 dialog{border:0;border-radius:10px;padding:16px;width:min(92vw,420px)}
 dialog label{display:block;margin:10px 0 2px;font-size:13px;font-weight:700}
 dialog input{width:100%;padding:8px;border:1px solid #999;border-radius:6px;font-size:14px}
@@ -108,6 +124,7 @@ dialog button{padding:8px 14px;border-radius:6px;border:1px solid #999;backgroun
     <div id="menu" role="menu">
       <button id="renew" type="button">当月分作成</button>
       <button id="renewSite" type="button">新しい現場で作成</button>
+      <button id="dmOpen" type="button">データ管理(整理・JSON)</button>
       <hr>
       <button id="siteDel" class="danger" type="button">この月の保存を削除</button>
     </div>
@@ -115,6 +132,29 @@ dialog button{padding:8px 14px;border-radius:6px;border:1px solid #999;backgroun
 </div>
 <div id="stage"></div>
 <div id="toast"></div>
+<dialog id="dm">
+  <b>データ管理</b>
+  <h4>この端末の使用容量</h4>
+  <div class="use"><div id="dmUse">計算中…</div><div class="bar"><i id="dmBar"></i></div></div>
+  <h4>保存済みの報告書</h4>
+  <ul id="dmList"></ul>
+  <h4>キャッシュ整理(容量を空ける)</h4>
+  <div class="row">
+    <button id="dmShrink" type="button">写真を軽量化</button>
+    <select id="dmMonths" aria-label="古い保存の基準"><option value="3">3か月より前</option><option value="6" selected>6か月より前</option><option value="12">1年より前</option></select>
+    <button id="dmOld" class="danger" type="button">古い保存を削除</button>
+  </div>
+  <p class="note">軽量化:保存済みの写真を長辺1000px・画質70%に縮小します(元に戻せません)。削除する前にJSON書き出しで控えを取っておくと安心です。</p>
+  <h4>JSONデータ</h4>
+  <div class="row">
+    <button id="dmExpAll" type="button">全件を書き出し</button>
+    <button id="dmExpCur" type="button">開いている月のみ</button>
+    <button id="dmImp" type="button">読み込み</button>
+  </div>
+  <input id="dmFile" type="file" accept="application/json,.json" style="display:none">
+  <p class="note">写真も含めて1つのJSONファイルになります。読み込みは、同じ現場・同じ月がある場合に上書きするか確認します。</p>
+  <div class="btns"><button id="dmClose" type="button">閉じる</button></div>
+</dialog>
 <dialog id="dlg">
   <b>LINE WORKS 投稿設定</b>
   <p>LINE WORKSのAPI認証情報はブラウザに置けないため、中継サーバー(Google Apps Script等)のURLを指定します。PDFと概要テキストをそのURLへPOSTします。</p>
@@ -411,6 +451,106 @@ async function migrate(){
   }catch(e){}
   refreshSel();
 })();
+
+// ▼ データ管理(容量表示・整理・JSON書き出し/読み込み)
+const fmtB=n=>n>=1048576?(n/1048576).toFixed(1)+'MB':Math.max(1,Math.round(n/1024))+'KB';
+const recSize=r=>{try{return JSON.stringify(r).length}catch(e){return 0}};
+async function dmRender(){
+  let list=[];try{list=await dbAll()}catch(e){}
+  list.sort((a,b)=>(b.updated||0)-(a.updated||0));
+  const total=list.reduce((n,r)=>n+recSize(r),0);
+  let q=null;try{q=navigator.storage&&navigator.storage.estimate&&await navigator.storage.estimate()}catch(e){}
+  $('#dmUse').innerHTML='報告書 <b>'+list.length+'件</b> / 約 <b>'+fmtB(total)+'</b>'+(q&&q.quota?'<br>端末全体: '+fmtB(q.usage||0)+' / 上限の目安 '+fmtB(q.quota):'');
+  $('#dmBar').style.width=(q&&q.quota?Math.min(100,(q.usage||0)/q.quota*100):0)+'%';
+  $('#dmList').innerHTML=list.length?list.map(r=>`<li><span>${esc(r.name)}　${monthLabel(r.month)}</span><em>${fmtB(recSize(r))}</em><button type="button" data-k="${esc(r.key)}">削除</button></li>`).join(''):'<li><span>保存済みの報告書はありません</span></li>';
+}
+function openDm(){$('#dm').showModal();dmRender()}
+$('#dmOpen').onclick=openDm;$('#dmClose').onclick=()=>$('#dm').close();
+$('#dmList').addEventListener('click',async e=>{
+  const b=e.target.closest('button[data-k]');if(!b)return;
+  const k=b.dataset.k;
+  if(!confirm('「'+k.replace('|',' ')+'」の保存を削除します。よろしいですか?'))return;
+  try{await dbDel(k);if(k===curKey){resetReport(false)}toast('削除しました');}catch(err){toast('削除に失敗: '+(err&&err.message||err),6000)}
+  refreshSel();dmRender();
+});
+// 古い保存の削除
+$('#dmOld').onclick=async()=>{
+  const n=Number($('#dmMonths').value),d=new Date();d.setMonth(d.getMonth()-n);
+  const lim=d.toISOString().slice(0,7);
+  let list=[];try{list=await dbAll()}catch(e){}
+  const old=list.filter(r=>r.month&&r.month<lim&&r.key!==curKey);
+  if(!old.length){toast('該当する古い保存はありません');return}
+  if(!confirm(old.length+'件('+fmtB(old.reduce((a,r)=>a+recSize(r),0))+')を削除します。\n対象: '+monthLabel(lim)+'より前\n事前にJSON書き出しで控えを取りましたか?'))return;
+  for(const r of old){try{await dbDel(r.key)}catch(e){}}
+  toast(old.length+'件を削除しました');refreshSel();dmRender();
+};
+// 写真の軽量化
+const shrinkImg=src=>new Promise(res=>{
+  const im=new Image();
+  im.onload=()=>{
+    const M=1000,r=Math.min(1,M/Math.max(im.width,im.height)),c=document.createElement('canvas');
+    c.width=Math.round(im.width*r);c.height=Math.round(im.height*r);
+    c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+    const o=c.toDataURL('image/jpeg',0.7);res(o.length<src.length?o:src)
+  };
+  im.onerror=()=>res(src);im.src=src;
+});
+$('#dmShrink').onclick=async()=>{
+  if(!confirm('保存済みの全写真を縮小します(元に戻せません)。続けますか?'))return;
+  await saveNow();
+  let list=[];try{list=await dbAll()}catch(e){}
+  const before=list.reduce((n,r)=>n+recSize(r),0);let i=0;
+  for(const r of list){
+    i++;toast('軽量化中… '+i+'/'+list.length,0);
+    for(const sh of (r.sheets||[]))for(const b of (sh.blocks||[]))for(let k=0;k<(b.imgs||[]).length;k++){if(b.imgs[k])b.imgs[k]=await shrinkImg(b.imgs[k])}
+    try{await dbPut(r.key,r)}catch(e){}
+  }
+  if(curKey){const st=await dbGet(curKey);if(st)applyState(st)}
+  const after=(await dbAll()).reduce((n,r)=>n+recSize(r),0);
+  toast('軽量化しました: '+fmtB(before)+' → '+fmtB(after),5000);dmRender();
+};
+// JSON書き出し
+async function exportJson(onlyCur){
+  await saveNow();
+  let list=[];try{list=await dbAll()}catch(e){}
+  if(onlyCur)list=list.filter(r=>r.key===curKey);
+  if(!list.length){toast(onlyCur?'開いている報告書がありません(現場名を入力すると保存されます)':'書き出せる保存データがありません');return}
+  const data={app:'safety-patrol-report',version:1,exported:new Date().toISOString(),reports:list};
+  const d=new Date(),p=n=>String(n).padStart(2,'0');
+  const name='是正報告_'+(onlyCur?list[0].name.replace(/[\\/:*?"<>|]/g,'_')+'_'+list[0].month:'全件')+'_'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'.json';
+  const file=new File([JSON.stringify(data)],name,{type:'application/json'});
+  try{
+    if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:name});toast('書き出しました');return}
+  }catch(e){if(e&&e.name==='AbortError')return}
+  const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=name;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000);toast('書き出しました: '+name,4000);
+}
+$('#dmExpAll').onclick=()=>exportJson(false);$('#dmExpCur').onclick=()=>exportJson(true);
+// JSON読み込み
+$('#dmImp').onclick=()=>{$('#dmFile').value='';$('#dmFile').click()};
+$('#dmFile').onchange=async()=>{
+  const f=$('#dmFile').files[0];if(!f)return;
+  let data;try{data=JSON.parse(await f.text())}catch(e){toast('JSONとして読み込めません',5000);return}
+  let reps=Array.isArray(data)?data:Array.isArray(data.reports)?data.reports:(data&&data.sheets?[data]:null);
+  if(!reps||!reps.every(r=>r&&Array.isArray(r.sheets))){toast('この報告書のJSONではありません',5000);return}
+  reps=reps.map(r=>{
+    const name=String(r.name||r.site||'').trim();if(!name)return null;
+    const month=r.month||monthOf(r.day);
+    return Object.assign({},r,{name,month,key:name+'|'+month,updated:r.updated||Date.now()});
+  }).filter(Boolean);
+  if(!reps.length){toast('取り込める報告書がありません(現場名が空です)',5000);return}
+  await saveNow();
+  const dup=[];for(const r of reps){if(await dbGet(r.key))dup.push(r.key)}
+  let overwrite=true;
+  if(dup.length)overwrite=confirm('読み込み '+reps.length+'件のうち、同じ現場・同じ月が '+dup.length+'件あります。\n\nOK=上書きする\nキャンセル=既存を残して新しい分だけ追加');
+  let n=0,reload=false;
+  for(const r of reps){
+    if(dup.includes(r.key)&&!overwrite)continue;
+    try{await dbPut(r.key,r);n++;if(r.key===curKey)reload=true}catch(e){toast('保存に失敗: '+(e&&e.message||e),6000);break}
+  }
+  if(reload){const st=await dbGet(curKey);if(st)applyState(st)}
+  toast(n+'件を読み込みました',4000);refreshSel();dmRender();
+};
 </script>
 </body>
 </html>
